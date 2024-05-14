@@ -17,13 +17,16 @@ import matplotlib.pyplot as plt
 import scipy.optimize as fit
 from calibsettings import *
 
-fitrange = (5,1000)
+fitrange = [(0,300),(0,3000)]
 
 def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain settings
     ch_lg = {}
     ch_hg = {}
     ch_hg_control = {}
-
+    ch_lg_control = {}
+    ch_hg_ptrg = {}
+    ch12 = [[0],[0]] #for each trigger combo
+    colors = ['red','blue','green','purple']
     #event count
     npath = 2*[0]
     neventstotal = 0
@@ -32,11 +35,13 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
         ch_hg[ch] = [0]
         ch_lg[ch] = [0]
         ch_hg_control[ch] = [0]
+        ch_lg_control[ch] = [0]
+        ch_hg_ptrg[ch] = [0]
     def readevent(infile): #read one event and add appropriate channels to histogram
         time = 0
-        hodohits = []
         lg = []
         hg = []
+        chsort = [0]
         for ch in range(4):
             line = infile.readline()
             if not line: return False, time
@@ -48,15 +53,11 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
             else:
                 lg.append(float(line.split()[2]))
                 hg.append(float(line.split()[3]))
-        for hodo in range(len(chlist)-4):
-            line = infile.readline()
-            if not line: return False, time
-            if float(line.split()[2])> 280:
-                #print(line.split()[2])
-                hodohits.append(chlist[hodo + 4])
+            i = 0
+        sorted = np.argsort(np.array(lg))
         for i in range(2):
-            combo = triggercombos[i]
-            if (combo[0] in hodohits) and (combo[1] in hodohits):
+            combo = channelcombos[i]
+            if (combo[0] in sorted[2:]) and (combo[1] in sorted[2:]):
                 npath[i] += 1
                 #the channels the particle did go through:
                 ch1 = channelcombos[i][0]
@@ -70,6 +71,9 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
                 ch_hg[ch2].append(hg[ch2])
                 ch_hg_control[ch1cont].append(hg[ch1cont])
                 ch_hg_control[ch2cont].append(hg[ch2cont])
+                ch_lg_control[ch1cont].append(lg[ch1cont])
+                ch_lg_control[ch2cont].append(lg[ch2cont])
+                #ch12[i].append(ch12adc) #just never use this array if there is no control channel 12
         return True, time
 
 
@@ -101,52 +105,55 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
         f = b*np.exp(-d*(x-a)**2)
         return f
 
-    ch_hg[2] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[2])
-    ch_hg[0] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[0])
+    #ch_hg[2] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[2])
+    #ch_hg[0] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[0])
     #make a histogram for each channel.
     mpv = []
     mpverr = []
-    plt.figure()
     colors = ['red','green','black','blue']
-    for ii in range(len(ecalchannels)):
-        i = ecalchannels[ii]
-      #fit
-        hist,bins = np.histogram(ch_hg[i], range = fitrange,bins=25)
-        #find bin centers
-        bin_center = []
-        for j in range(len(bins)-1):
-            bin_center.append((bins[j]+bins[j+1])/2)
-        '''popt,pcov = fit.curve_fit(gauss,np.array(bin_center),hist,p0=[500,10,.0001])
-        perr = np.sqrt(np.diag(pcov))
-        mpv.append(popt[0])
-        mpverr.append(perr[0])'''
-        #find average of histogram
-        clipped = []
-        for j in range(len(ch_hg[i])):
-            if (ch_hg[i][j] < fitrange[1]) and (ch_hg[i][j] > fitrange[0]):
-                clipped.append(ch_hg[i][j])
-        if len(clipped) == 0:
-            clipped.append(1) #this doesn't mean anything, should just help keep your code from breaking
-        mpv.append(np.average(np.array(clipped)))
-        mpverr.append(np.std(np.array(clipped))/np.sqrt(len(clipped)))
+    listadc = [ch_lg,ch_hg]
+    names = ["Low Gain","High Gain"]
+    filenm = ["LG","HG"]
+    for i in range(2):
+        plt.figure()
+        for j in range(len(ecalchannels)):
+            j = ecalchannels[j]
+            hist,bins = np.histogram(listadc[i][j], range = fitrange[i],bins=25)
+            #find bin centers
+            bin_center = []
+            for k in range(len(bins)-1):
+                bin_center.append((bins[j]+bins[j+1])/2)
+            '''popt,pcov = fit.curve_fit(gauss,np.array(bin_center),hist,p0=[500,10,.0001])
+            perr = np.sqrt(np.diag(pcov))
+            mpv.append(popt[0])
+            perr.append(perr[0])'''
+            #find average of histogram
+            clipped = []
+            for k in range(len(listadc[i][j])):
+                if (listadc[i][j][k] < fitrange[i][1]) and (listadc[i][j][k] > fitrange[i][0]):
+                    clipped.append(listadc[i][j][k])
+            if len(clipped) == 0:
+                clipped.append(1) #this doesn't mean anything, should just help keep your code from breaking
+            mpv.append(np.average(np.array(clipped)))
+            mpverr.append(np.std(np.array(clipped))/np.sqrt(len(clipped)))
 
-        #plot
-        #plt.errorbar(bin_center,hist,label="Channel "+str(i),yerr = np.sqrt(hist),color=colors[i],fmt='o',elinewidth=1,marker='o')
-        plt.hist(ch_hg[i],bins=50,label="Channel "+str(i),color=colors[i],fill=False,histtype='step',edgecolor=colors[i],range=fitrange)
-        x = np.arange(*fitrange,1)
-        #plt.plot(x,gauss(x,*popt),color=colors[i])
-        ylim = plt.gca().get_ylim()
-        plt.ylim(0,70)
-        plt.plot(np.repeat(mpv[i],1000),np.arange(0,1000,1),color=colors[i],linestyle = "dotted", label = "Channel "+str(i)+" mean")
-        plt.xlim(*fitrange)
-        plt.xlabel("ADC (High Gain)")
-        plt.ylabel("Counts")
-        plt.title("Inter-Channel Gain Calibration, Run "+sys.argv[1])
-        plt.legend()
-    plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".pdf")
-    plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".png")
-    print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".pdf")
-    print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".png")
+            #plot
+            #plt.errorbar(bin_center,hist,label="Channel "+str(i),yerr = np.sqrt(hist),color=colors[i],fmt='o',elinewidth=1,marker='o')
+            plt.hist(listadc[i][j],bins=50,label="Channel "+str(j),color=colors[j],fill=False,histtype='step',edgecolor=colors[j],range=fitrange[i])
+            x = np.arange(*fitrange[i],1)
+            #plt.plot(x,gauss(x,*popt),color=colors[i])
+            ylim = plt.gca().get_ylim()
+            plt.ylim(0,70)
+            plt.plot(np.repeat(mpv[j+4*i],1000),np.arange(0,1000,1),color=colors[j],linestyle = "dotted", label = "Channel "+str(j)+" mean")
+            plt.xlim(*fitrange[i])
+            plt.xlabel("ADC ("+names[i]+")")
+            plt.ylabel("Counts")
+            plt.title("Inter-Channel Gain Calibration, Run "+sys.argv[1])
+            plt.legend()
+        plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+filenm[i]+".pdf")
+        plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+filenm[i]+".png")
+        print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+filenm[i]+".pdf")
+        print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+filenm[i]+".png")
 
     def analyze_control_hits():
     #anal
@@ -265,7 +272,7 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
         i = ecalchannels[ii]
         print("Channel "+str(i))
         gain_f[i] = find_gain(gf,gs,gs_i[i],mpvmax,mpv[i])
-    analyze_control_hits()
+    #analyze_control_hits()
     return gain_f
     
 

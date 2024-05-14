@@ -63,14 +63,14 @@ hg_sum=[]
 #  lg_sum.append(sum([ch0_lg[i],ch1_lg[i],ch2_lg[i],ch3_lg[i]]))
 #  hg_sum.append(sum([ch0_hg[i],ch1_hg[i],ch2_hg[i],ch3_hg[i]]))
 
-nbin=800; low=0; high=8000;
-hgmax=1000;
+nbin=80; low=0; high=2500;
+hgmax=2500;
 h_hg = {}
 for ch in chlist:
   h_hg[ch] = TH1F("h_hgch"+chlist_str[ch],"h_hgch"+chlist_str[ch],nbin,low,high)
 
-lgmax = 8000
-nbin=1600; low=0; high=8192;
+lgmax = 800
+nbin=80; low=0; high=2500;
 h_lg = {}
 for ch in chlist:
   h_lg[ch] = TH1F("h_lgch"+chlist_str[ch],"h_lgch"+chlist_str[ch],nbin,low,high)

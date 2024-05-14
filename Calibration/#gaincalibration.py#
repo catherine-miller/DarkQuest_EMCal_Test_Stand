@@ -23,6 +23,7 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
     ch_lg = {}
     ch_hg = {}
     ch_hg_control = {}
+    extrachannels = {} #channels that are not part of EMCal or hodo sectors (empty controls)
 
     #event count
     npath = 2*[0]
@@ -32,11 +33,14 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
         ch_hg[ch] = [0]
         ch_lg[ch] = [0]
         ch_hg_control[ch] = [0]
+    for i in range(len(chlist)-8):
+        extrachannels[i] = [0]
     def readevent(infile): #read one event and add appropriate channels to histogram
         time = 0
         hodohits = []
         lg = []
         hg = []
+        extrach = []
         for ch in range(4):
             line = infile.readline()
             if not line: return False, time

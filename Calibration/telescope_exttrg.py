@@ -1,18 +1,18 @@
 #######################################################################################################
-# Title: Telescope Comparison
-# Description: Read a Janus output file and filter events based on hodoscope hits (select valid
-#    combinations of hodo hits in the muon telescope configuration). For each channel, make a list of
+# Title: Telescope External Trigger
+# Description: To analyze Janus output files for a run using the cosmic muon telescope, externally
+#    triggered. Logic attempts to infer which channel combination the muon passed through by checking
+#    the two highest ADC values--if they are a valid combination, the event is marked as belonging to
+#    that combination. For each channel, makes list of
 #    events where the reconstructed muon track passes through that channel. Also make a list of events
 #    where the muon track did not pass through that channel. Compare the two energy distributions
 #    (we expect them to be different). Also compare to data from a second run, which used the periodic
 #    trigger--this is an even more controlled control.
-# Arguments: 1. Run number of muon telescope run, 2. Run number of ptrg run, 3. Gain setting (for the
-# purpose of legend)
+# Arguments: 1. Run number of muon telescope run, 2. Run number of ptrg run
 # Run with (e.g.):
-#    python3 telescope_comparison.py 4004 4080 20
-#    python3 telescope_comparison.py 2928 4081 50
+#    python3 telescope_exttrg.py 4296 4297
 # Author: Catherine Miller, cmiller6@bu.edu
-# Date: 3 May 2024
+# Date: 13 May 2024
 #######################################################################################################
 
 import pandas
@@ -22,12 +22,13 @@ import matplotlib.pyplot as plt
 import scipy.optimize as fit
 from calibsettings import *
 
-fitrange = (10,1500)
+fitrange = (0,4000)
 
-def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, initial gain settings
+def calibrate(run_i, run_ptrg, homedir): #arguments: initial run number, initial gain settings
     ch_lg = {}
     ch_hg = {}
     ch_hg_control = {}
+    ch_lg_control = {}
     ch_hg_ptrg = {}
     ch12 = [[0],[0]] #for each trigger combo
     colors = ['red','blue','green','purple']
@@ -39,12 +40,13 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
         ch_hg[ch] = [0]
         ch_lg[ch] = [0]
         ch_hg_control[ch] = [0]
+        ch_lg_control[ch] = [0]
         ch_hg_ptrg[ch] = [0]
     def readevent(infile): #read one event and add appropriate channels to histogram
         time = 0
-        hodohits = []
         lg = []
         hg = []
+        chsort = [0]
         for ch in range(4):
             line = infile.readline()
             if not line: return False, time
@@ -56,16 +58,11 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
             else:
                 lg.append(float(line.split()[2]))
                 hg.append(float(line.split()[3]))
-        for hodo in range(len(chlist)-4):
-            line = infile.readline()
-            if not line: return False, time
-            if float(line.split()[2])> 280:
-                #print(line.split()[2])
-                hodohits.append(chlist[hodo + 4])
-            ch12adc = float(line.split()[3])
+            i = 0
+        sorted = np.argsort(np.array(lg))
         for i in range(2):
-            combo = triggercombos[i]
-            if (combo[0] in hodohits) and (combo[1] in hodohits):
+            combo = channelcombos[i]
+            if (combo[0] in sorted[2:]) and (combo[1] in sorted[2:]):
                 npath[i] += 1
                 #the channels the particle did go through:
                 ch1 = channelcombos[i][0]
@@ -79,7 +76,9 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 ch_hg[ch2].append(hg[ch2])
                 ch_hg_control[ch1cont].append(hg[ch1cont])
                 ch_hg_control[ch2cont].append(hg[ch2cont])
-                ch12[i].append(ch12adc) #just never use this array if there is no control channel 12
+                ch_lg_control[ch1cont].append(lg[ch1cont])
+                ch_lg_control[ch2cont].append(lg[ch2cont])
+                #ch12[i].append(ch12adc) #just never use this array if there is no control channel 12
         return True, time
 
 
@@ -111,7 +110,6 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
     #ch_hg[0] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[0])
 
     def analyze_control_hits():
-    #anal
         mpv_control = []
         mpverr_control = []
         names = ['Track through channel','Track outside channel', 'Periodic trigger']
@@ -142,7 +140,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 plt.xlim(*fitrange)
                 plt.xlabel("ADC (High Gain)")
                 plt.ylabel("Counts")
-                plt.title("Cosmic Muon Telescope Studies, HG "+gain+", Channel "+str(i))
+                plt.title("Cosmic Muon Telescope Studies, Channel "+str(i))
                 plt.legend()
                 k+=1
             plt.savefig(homedir+"Figures/Telescope_Comparison_ptrg_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".pdf")
@@ -183,7 +181,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 plt.xlim(*fitrange)
                 plt.xlabel("ADC (High Gain)")
                 plt.ylabel("Counts")
-                plt.title("Cosmic Muon Telescope Studies, HG "+gain+", Channel "+str(i))
+                plt.title("Cosmic Muon Telescope Studies, Channel "+str(i))
                 plt.legend()
                 k+=1
             plt.savefig(homedir+"Figures/Ch12_Comparison_ptrg_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".pdf")
@@ -192,26 +190,16 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
             print("Saving figure "+homedir+"Figures/Ch12_Comparison_ptrg_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".png")
         print(mpv_control)
         print(mpverr_control)
-    def twoside_correlation(run,gain):
+    def twoside_correlation(run):
         plt.figure()
-        plt.hist2d(ch_hg[0],ch_hg_control[3],bins = [20,20],range = [[0,1000],[0,1000]]) #ch_hg_control[1]
-        plt.title("Cosmic Muon Telescope Lateral Correlation, Run "+run+", HG "+gain)
-        plt.xlabel("Channel 0 ADC (Within Track)")
-        plt.ylabel("Channel 3 ADC (No Track)")
+        plt.hist2d(ch_hg[1],ch_hg_control[2],bins = [20,20],range = [fitrange,fitrange]) #ch_hg_control[1]
+        plt.title("Cosmic Muon Telescope Lateral Correlation, Run "+run)
+        plt.xlabel("Channel 1 ADC (Within Track)")
+        plt.ylabel("Channel 2 ADC (No Track)")
         plt.savefig(homedir +"Figures/bilateral_correlation_Run_"+run_i+".pdf")
         plt.savefig(homedir +"Figures/bilateral_correlation_Run_"+run_i+".png")
         print("Saving figure "+homedir +"Figures/bilateral_correlation_Run_"+run_i+".pdf")
         print("Saving figure "+homedir +"Figures/bilateral_correlation_Run_"+run_i+".png")
-    def ch12_correlation(run,gain):
-        plt.figure()
-        plt.hist2d(ch_hg[0],ch12[0],bins = [20,20],range = [[0,1500],[0,1500]])
-        plt.title("Cosmic Muon Telescope Lateral Correlation, Run "+run+", HG "+gain)
-        plt.xlabel("Channel 0 ADC (Within Track)")
-        plt.ylabel("Channel 12 ADC (No SiPM plugged in)")
-        plt.savefig(homedir +"Figures/ch12_correlation_Run_"+run_i+".pdf")
-        plt.savefig(homedir +"Figures/ch12_correlation_Run_"+run_i+".png")
-        print("Saving figure "+homedir +"Figures/ch12_correlation_Run_"+run_i+".pdf")
-        print("Saving figure "+homedir +"Figures/ch12_correlation_Run_"+run_i+".png")
     def plot4channel(run_i):
         #for each trigger combo, plot all four channels together
         mpv_control = []
@@ -248,7 +236,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                     plt.xlim(*fitrange)
                     plt.xlabel("ADC (High Gain)")
                     plt.ylabel("Probability Density")
-                    plt.title("Cosmic Muon Telescope Studies, HG "+gain+", "+titles[i])
+                    plt.title("Cosmic Muon Telescope Studies, "+titles[i])
                     plt.legend()
             plt.savefig(homedir+"Figures/Telescope_4channel_combo"+str(i)+"Run_"+run_i+".pdf")
             plt.savefig(homedir+"Figures/Telescope_4channel_combo"+str(i)+"Run_"+run_i+".png")
@@ -257,14 +245,14 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
         
 
     analyze_control_hits()
-    twoside_correlation(run_i,gain)
+    twoside_correlation(run_i)
     plot4channel(run_i)
-    compare_channel_12()
-    ch12_correlation(run_i,gain)
+    #compare_channel_12()
+    #ch12_correlation(run_i,gain)
     
 
 if __name__ == "__main__":
-    calibrate(sys.argv[1],sys.argv[2],sys.argv[3],homedir)
+    calibrate(sys.argv[1],sys.argv[2],homedir)
 
 
 
