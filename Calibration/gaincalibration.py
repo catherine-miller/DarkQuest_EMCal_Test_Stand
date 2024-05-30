@@ -45,6 +45,7 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
                 time = float(line.split()[0])
                 lg.append(float(line.split()[4]))
                 hg.append(float(line.split()[5]))
+                print("read one line")
             else:
                 lg.append(float(line.split()[2]))
                 hg.append(float(line.split()[3]))

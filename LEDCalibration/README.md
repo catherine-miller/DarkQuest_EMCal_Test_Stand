@@ -1,3 +1,7 @@
+These scripts can be used to calibrate a SiPM with the LED pulser.
+
+The first step is to calibrate the LED itself.
+
 These scripts analyze several Janus data files from a gain scan study. plotGauss_GS fits
 energy distributions from one channel to a Gaussian distribution and writes the mean and
 the gain setting to a csv file. GainScan.py analyzes this CSV file and plots a curve, gain

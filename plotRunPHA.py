@@ -4,8 +4,8 @@
 #    DataFiles. Makes an energy histogram for each channel, high gain
 #    and low gain. Plots these energy histograms (with several variations).
 #    Saves each channel's energy information in a ROOT histogram.
-# Arguments: Run number
-# Run with (e.g.): python3 plotRunPHA.py 2923 -l -q -b
+# Arguments: Run number, (optional) board number
+# Run with (e.g.): python3 plotRunPHA.py 2923 01 -l -q -b
 ########################################################################
 
 
@@ -18,6 +18,10 @@ from array import array
 
 gROOT.SetBatch(True)
 
+if (len(sys.argv) == 2) or (sys.argv[2] == "-l"):
+    brd = '00'
+else:
+    brd = sys.argv[2]
 #arguments:
 
 chlist = [0,1,2,3] #[0,1,2,3,4,5,6,7,8,9,10,11]
@@ -39,7 +43,7 @@ with open(homedir+"DataFiles/Run"+str(sys.argv[1])+"_list.txt") as infile:
     if ("//" in line): continue
     if ("Tstamp" in line): continue
     for ch in chlist:
-      if ("00  "+chlist_str[ch] in line):
+      if (brd+"  "+chlist_str[ch] in line):
         if (ch==0):
           nevents+=1
           ch_lg[ch].append(float(line.split()[4]))
@@ -63,14 +67,14 @@ hg_sum=[]
 #  lg_sum.append(sum([ch0_lg[i],ch1_lg[i],ch2_lg[i],ch3_lg[i]]))
 #  hg_sum.append(sum([ch0_hg[i],ch1_hg[i],ch2_hg[i],ch3_hg[i]]))
 
-nbin=80; low=0; high=2500;
+nbin=8100; low=0; high=8100;
 hgmax=2500;
 h_hg = {}
 for ch in chlist:
   h_hg[ch] = TH1F("h_hgch"+chlist_str[ch],"h_hgch"+chlist_str[ch],nbin,low,high)
 
-lgmax = 800
-nbin=80; low=0; high=2500;
+lgmax = 2500
+nbin=8100; low=0; high=8100;
 h_lg = {}
 for ch in chlist:
   h_lg[ch] = TH1F("h_lgch"+chlist_str[ch],"h_lgch"+chlist_str[ch],nbin,low,high)
@@ -206,7 +210,7 @@ for ch in chlist:
   if (ch==0):
     h_hg[ch].GetXaxis().SetTitle("ADC Value (High Gain)")
     h_hg[ch].SetTitle("DarkQuest EMCal Test Stand")
-    h_hg[ch].GetXaxis().SetRangeUser(0,hgmax)
+    h_hg[ch].GetXaxis().SetRangeUser(0,50000)
     h_hg[ch].GetYaxis().SetTitle("Counts")
     #h_hg[ch].SetMaximum(1.5*max(maximums))
     #h_hg[ch].SetMaximum(0.5*nevents)

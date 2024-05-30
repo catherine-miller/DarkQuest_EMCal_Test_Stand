@@ -1,0 +1,9 @@
+let i=0
+for run in {4803..4821}
+do
+        python3 ../plotRunPHA.py $run 01 -l -q -b #for board 1: the EMCal board
+	python3 plotGauss_LED.py 02 $run $i
+	let i+=1
+done
+
+#led calibration: {4341..4349} {4354..4394}

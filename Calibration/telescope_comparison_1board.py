@@ -7,7 +7,8 @@
 #    (we expect them to be different). Also compare to data from a second run, which used the periodic
 #    trigger--this is an even more controlled control.
 # Arguments: 1. Run number of muon telescope run, 2. Run number of ptrg run, 3. Gain setting (for the
-# purpose of legend)
+#     purpose of legend)
+#     N.B. there are also many important parameters in calibsettings.py
 # Run with (e.g.):
 #    python3 telescope_comparison.py 4004 4080 20
 #    python3 telescope_comparison.py 2928 4081 50
@@ -22,7 +23,7 @@ import matplotlib.pyplot as plt
 import scipy.optimize as fit
 from calibsettings import *
 
-fitrange = (10,1500)
+fitrange = (0,500)
 
 def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, initial gain settings
     ch_lg = {}
@@ -45,7 +46,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
         hodohits = []
         lg = []
         hg = []
-        for ch in range(4):
+        for ch in range(4): #for now rely on the fact that EMCal hits (brd 1) appear before hodo hits (brd 0) in event list
             line = infile.readline()
             if not line: return False, time
             while ("//" in line) or ("Tstamp" in line): line = infile.readline()
@@ -59,10 +60,13 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
         for hodo in range(len(chlist)-4):
             line = infile.readline()
             if not line: return False, time
-            if float(line.split()[2])> 280:
-                #print(line.split()[2])
-                hodohits.append(chlist[hodo + 4])
-            ch12adc = float(line.split()[3])
+            if (hodo == 0 and len(line.split()) > 4):
+                if float(line.split()[4]) > 280:
+                    hodohits.append(chlist[hodo + 4])
+            else:
+                if float(line.split()[2])> 280:
+                    hodohits.append(chlist[hodo + 4])
+            #ch12adc = float(line.split()[3])
         for i in range(2):
             combo = triggercombos[i]
             if (combo[0] in hodohits) and (combo[1] in hodohits):
@@ -79,7 +83,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 ch_hg[ch2].append(hg[ch2])
                 ch_hg_control[ch1cont].append(hg[ch1cont])
                 ch_hg_control[ch2cont].append(hg[ch2cont])
-                ch12[i].append(ch12adc) #just never use this array if there is no control channel 12
+                #ch12[i].append(ch12adc) #just never use this array if there is no control channel 12
         return True, time
 
 
@@ -137,7 +141,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 x = np.arange(*fitrange,1)
                 #plt.plot(x,gauss(x,*popt),color=colors[i])
                 ylim = plt.gca().get_ylim()
-                plt.ylim(0,.007)
+                plt.ylim(0,.01)
                 plt.plot(np.repeat(np.average(np.array(clipped)),1000),np.arange(0,1000,1),color=colors[k],linestyle = "dotted", label = "Mean, "+names[k])
                 plt.xlim(*fitrange)
                 plt.xlabel("ADC (High Gain)")
@@ -155,12 +159,11 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
     #anal
         mpv_control = []
         mpverr_control = []
-        names = ['Track through channel','Track outside channel', 'Periodic trigger','Control channel--no SiPM']
+        names = ['Track through channel','Track outside channel', 'Periodic trigger','Control channel--No SiPM']
         for i in range(2):
             plt.figure()
             k = 0
             for arr in [ch_hg[i],ch_hg_control[i],ch_hg_ptrg[i],ch_hg[1]]: #this ch12 index depends on hodo combo info
-                #changed to reflect hcannel 1
                 hist,bins = np.histogram(ch_hg[i], range = fitrange,bins=25)
                 #find bin centers
                 bin_center = []
@@ -179,7 +182,7 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
                 x = np.arange(*fitrange,1)
                 #plt.plot(x,gauss(x,*popt),color=colors[i])
                 ylim = plt.gca().get_ylim()
-                plt.ylim(0,.007)
+                plt.ylim(0,.01)
                 plt.plot(np.repeat(np.average(np.array(clipped)),1000),np.arange(0,1000,1),color=colors[k],linestyle = "dotted", label = "Mean, "+names[k])
                 plt.xlim(*fitrange)
                 plt.xlabel("ADC (High Gain)")
@@ -195,17 +198,17 @@ def calibrate(run_i, run_ptrg, gain, homedir): #arguments: initial run number, i
         print(mpverr_control)
     def twoside_correlation(run,gain):
         plt.figure()
-        plt.hist2d(ch_hg[0],ch_hg_control[3],bins = [20,20],range = [[0,1500],[0,1500]]) #ch_hg_control[1]
+        plt.hist2d(ch_hg[3],ch_hg_control[0],bins = [20,20],range = [fitrange,fitrange]) #ch_hg_control[1]
         plt.title("Cosmic Muon Telescope Lateral Correlation, Run "+run+", HG "+gain)
-        plt.xlabel("Channel 0 ADC (Within Track)")
-        plt.ylabel("Channel 3 ADC (No Track)")
+        plt.xlabel("Channel 3 ADC (Within Track)")
+        plt.ylabel("Channel 0 ADC (No Track)")
         plt.savefig(homedir +"Figures/bilateral_correlation_Run_"+run_i+".pdf")
         plt.savefig(homedir +"Figures/bilateral_correlation_Run_"+run_i+".png")
         print("Saving figure "+homedir +"Figures/bilateral_correlation_Run_"+run_i+".pdf")
         print("Saving figure "+homedir +"Figures/bilateral_correlation_Run_"+run_i+".png")
     def ch12_correlation(run,gain):
         plt.figure()
-        plt.hist2d(ch_hg[0],ch_hg[1],bins = [20,20],range = [[0,1500],[0,1500]])
+        plt.hist2d(ch_hg[0],ch12[0],bins = [20,20],range = [[0,1500],[0,1500]])
         plt.title("Cosmic Muon Telescope Lateral Correlation, Run "+run+", HG "+gain)
         plt.xlabel("Channel 0 ADC (Within Track)")
         plt.ylabel("Channel 12 ADC (No SiPM plugged in)")

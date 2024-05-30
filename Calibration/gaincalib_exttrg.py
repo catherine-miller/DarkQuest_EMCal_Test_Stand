@@ -5,9 +5,9 @@
 #    Find the mean for each channel. Calibrate--find the DT5202 gain setting to scale the output
 #    of a channel by a given factor. Return this calibration.
 # Arguments: 1. Run number of initial calibration run, 2. list of inital gain settings (comma separated)
-#    target MPV of channel you want to calibrate
+#    target MPV of channel you want to calibrate, 3. -e for "external trigger" setting
 # Author: Catherine Miller, cmiller6@bu.edu
-# 24 April 2024
+# Date: 14 May 2024
 #######################################################################################################
 
 import pandas
@@ -22,7 +22,7 @@ fitrange = [(0,300),(0,3000)]
 def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain settings
     ch_lg = {}
     ch_hg = {}
-    ch_hg_control = {}
+    ch_hg_control = {} #adc from the "wrong side" of the detector
     ch_lg_control = {}
     ch_hg_ptrg = {}
     ch12 = [[0],[0]] #for each trigger combo
@@ -37,7 +37,51 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
         ch_hg_control[ch] = [0]
         ch_lg_control[ch] = [0]
         ch_hg_ptrg[ch] = [0]
-    def readevent(infile): #read one event and add appropriate channels to histogram
+    def readevent(infile): #read one event and add appropriate ADC values to lists
+        #this is for when using the DT5202 trigger
+        time = 0
+        hodohits = []
+        lg = []
+        hg = []
+        for ch in range(4):
+            line = infile.readline()
+            if not line: return False, time
+            while ("//" in line) or ("Tstamp" in line): line = infile.readline()
+            if (ch==0):
+                time = float(line.split()[0])
+                lg.append(float(line.split()[4]))
+                hg.append(float(line.split()[5]))
+            else:
+                lg.append(float(line.split()[2]))
+                hg.append(float(line.split()[3]))
+        for hodo in range(len(chlist)-4):
+            line = infile.readline()
+            if not line: return False, time
+            if float(line.split()[2])> 280:
+                #print(line.split()[2])
+                hodohits.append(chlist[hodo + 4])
+        for i in range(2):
+            combo = triggercombos[i]
+            if (combo[0] in hodohits) and (combo[1] in hodohits):
+                npath[i] += 1
+                #the channels the particle did go through:
+                ch1 = channelcombos[i][0]
+                ch2 = channelcombos[i][1]
+                #the channels the particle did not go through:
+                ch1cont = channelcombos[i-1][0]
+                ch2cont = channelcombos[i-1][1]
+                ch_lg[ch1].append(lg[ch1])
+                ch_lg[ch2].append(lg[ch2])
+                ch_hg[ch1].append(hg[ch1])
+                ch_hg[ch2].append(hg[ch2])
+                ch_hg_control[ch1cont].append(hg[ch1cont])
+                ch_hg_control[ch2cont].append(hg[ch2cont])
+                ch_lg_control[ch1cont].append(lg[ch1cont])
+                ch_lg_control[ch2cont].append(lg[ch2cont])
+        return True, time
+    def readevent_exttrg(infile): #read one event and add appropriate channels to histogram
+        #exttrg is for when hodoscope trigger logic is done w NIM logic unit
+        #so you decide which side muon went through by looking at the 2 highest ecal channels
         time = 0
         lg = []
         hg = []
@@ -82,22 +126,11 @@ def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain
 
     linegood = True
     with open(homedir+"DataFiles/Run"+str(run_i)+"_list.txt") as infile:
-      if nhodochannels == 0:
-        for line in infile:
-          if ("//" in line): continue
-          if ("Tstamp" in line): continue
-          for ch in chlist:
-            if ("00  "+chlist_str[ch] in line):
-              if (ch==0):
-                nevents+=1
-                ch_lg[ch].append(float(line.split()[4]))
-                ch_hg[ch].append(float(line.split()[5]))
-              else:
-                ch_lg[ch].append(float(line.split()[2]))
-                ch_hg[ch].append(float(line.split()[3]))
-      else:
         while linegood:
-            linegood, time = readevent(infile)
+            if len(sys.argv) >= 4:
+                linegood, time = readevent_exttrg(infile)
+            else:
+                linegood, time = readevent(infile)
             if (linegood): time_s = time*10**(-6)
 
     #choose to plot with matplotlib rather than ROOT because not sure where ROOT is installed

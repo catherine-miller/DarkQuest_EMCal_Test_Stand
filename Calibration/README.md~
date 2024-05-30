@@ -6,7 +6,3 @@ DataFiles).
 
 You could easily modify these scripts for any other study where you scan one parameter (e.g.,
 bias voltage).
-
-The bas script gainstudies.sh iterates over several Janus data files, automatically running
-plotRunPHA.py and plotGauss_GS.py. After it's done, you should then run GainScan.py to
-produce the gain factor vs. gain setting curve.
