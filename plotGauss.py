@@ -82,7 +82,10 @@ for i in range(1):
   for ch in range(len(channels)):
     mpv.append(fit[ch].GetParameter(1))
     mpverr.append(fit[ch].GetParError(1))
-  print(mpv,mpverr)
+  print("Channel means:")
+  print(mpv)
+  print("Error in channel means:")
+  print(mpverr)
   
 ''' 
 #write to file which will be used to make plot

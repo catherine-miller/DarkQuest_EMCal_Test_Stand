@@ -1,8 +1,0 @@
-These scripts analyze several Janus data files from a gain scan study. plotGauss_GS fits
-energy distributions from one channel to a Gaussian distribution and writes the mean and
-the gain setting to a csv file. GainScan.py analyzes this CSV file and plots a curve, gain
-factor vs gain setting, producing a new csv file (these are saved in a directory called
-DataFiles).
-
-You could easily modify these scripts for any other study where you scan one parameter (e.g.,
-bias voltage).

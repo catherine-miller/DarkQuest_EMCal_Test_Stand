@@ -1,7 +1,0 @@
-let i=50
-for run in {2750..2759} 2772 2774 2776 2781 2783
-do
-        let i+=1
-        python3 EMCal_analysis/plotRunPHA.py $run -l -q -b
-	python3 EMCal_analysis/GainStudies/plotGauss_GS.py 03 $run $i
-done

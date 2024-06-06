@@ -6,7 +6,7 @@ import sys
 import numpy as np
 import scipy.optimize as fit
 
-plotfilename = "1stop"
+plotfilename = "1_0stop_comparison"
 plottitle = "1-Stop N.D. Filter"
 homedir = "/home/cmiller6/"
 if len(sys.argv) > 1:
@@ -39,11 +39,13 @@ df=df.sort_values(by="LED voltage",ascending = True)
 df = df.reset_index()
 #get data from SiPM saturation curve run
 cols2 = ["run","LED voltage","lgmpv","lgmpverr","lgstddev","lgstddeverr","hgmpv","hgmpverr","hgstddev","hgstddeverr"]
-df2 = pandas.read_csv(homedir+"/DataFiles/SiPMscan_"+plotfilename+".csv", names=cols2,index_col=False,header=None,sep=',')
+df2 = pandas.read_csv(homedir+"/DataFiles/SiPMscan_1stop.csv", names=cols2,index_col=False,header=None,sep=',')
+df3 = pandas.read_csv(homedir+"/DataFiles/SiPMscan_0stop.csv", names=cols2,index_col=False,header=None,sep=',')
 #df2=df2.sort_values(by="LED voltage",ascending = True)
 #df2 = df2.reset_index()
 #initialize lists
 n = df2.shape[0]
+m = df3.shape[0]
 mpv = []
 mpverr = []
 relmpverr = []
@@ -60,32 +62,41 @@ relmpverr = []
 
 #fill lists with data from dataframe
 j = 0 #index of point in initial calibration data
-E_ADC = 0.731 #theoretically calculated energy deposition from run in detector
-#in MeV/HGADC
-#which corresponds to an MPV of 182.3
-E_conv_factor = E_ADC*df2.loc[2,"hgmpv"]/df.loc[10,"mpv"]*10**(-3) #in GeV/HGADC
+E_ADC = 0.731*10**(-3) #theoretically calculated energy deposition from run in detector
+#in GeV/HGADC
+E_conv_factor = E_ADC*df2.loc[11,"hgmpv"]/df.loc[20,"mpv"] #in GeV/"intensity"
 #assume a perfect 10 attenuation factor
 #have to convert between SiPM scan adc and intensity (from df mpv)
-print(df2.loc[2,"LED voltage"])
-print(df.loc[10,"LED voltage"])
+print(df2.loc[11,"LED voltage"])
+print(df.loc[20,"LED voltage"])
+print(df2.loc[11,"hgmpv"])
+print(df.loc[20,"mpv"])
 scale_factor = 1
 for i in range(n):
     while float(df2.loc[i,"LED voltage"]) - float(df.loc[j,"LED voltage"]) > 0.01:
         j+=1
-    while float(df2.loc[i,"LED voltage"]) - float(df.loc[j,"LED voltage"])
+    while float(df2.loc[i,"LED voltage"]) - float(df.loc[j,"LED voltage"]) < -0.01:
+        j-=1
     if i > 0:
         if df2.loc[i,"LED voltage"] < df2.loc[i-1,"LED voltage"]:
-            scale_factor = scale_factor*2053.3/82.18
+            scale_factor = scale_factor*4616.2/253.1
             print('changed scale factor')
     relmpv.append(df.loc[j,"mpv"]*scale_factor)
-    E.append(df.loc[j,"mpv"]*E_conv_factor)
-    Eerr.append(df.loc[j,"mpverr"]*E_conv_factor) #standard error = sigma/sqrt(n)
+    E.append(df.loc[j,"mpv"]*E_conv_factor*scale_factor)
+    print("\n")
+    print(df2.loc[i,"LED voltage"])
+    print(df.loc[j,"LED voltage"])
+    Eerr.append(df.loc[j,"mpverr"]*E_conv_factor*scale_factor) #standard error = sigma/sqrt(n)
     relerr.append(df2.loc[i,"lgstddev"]/df2.loc[i,"lgmpv"])
     sigma.append(df2.loc[i,"lgstddev"])
     mpv.append(df2.loc[i,"lgmpv"])
     mpv_stderr.append(df2.loc[i,"lgmpverr"])
     relEerr.append(Eerr[i]/E[i])
     relmpverr.append(mpv_stderr[i]/mpv[i])
+
+mpv_0stop = []
+for i in range(m):
+    mpv_0stop.append(df3.loc[i,"lgmpv"])
 
 #we have the ADC relative error stored in relerr, but we need to calculate the energy relative error
 #yerr = xerr*dy/dx    or something. haha what do I know about error propagation
@@ -107,7 +118,7 @@ for e in E:
     if e < 120:
         E2.append(e)
 E = E2'''
-gr = TGraphErrors(len(E), array('f',E), array('f',np.sqrt(10)*np.array(mpv)),array('f',Eerr), array('f',mpv_stderr))
+gr = TGraphErrors(len(E), array('f',E), array('f',np.array(mpv)),array('f',Eerr), array('f',mpv_stderr))
 gr.SetTitle("Hamamatsu S14160-6010PS SiPM Saturation ("+plottitle+"); Estimated Energy in Detector (GeV); Low Gain ADC")
 gr.SetMarkerColor(4)
 gr.SetMarkerStyle( 21 )
@@ -150,7 +161,7 @@ for i in range(1):
     
         #legend.AddEntry(gr3,"Energy resolution,\n \sigma_{E}/E")
         #legend.AddEntry(gr4,"Fit to inverse square root model")
-        gr2[i].GetXaxis().SetRangeUser(0,10)
+        gr2[i].GetXaxis().SetRangeUser(0,40)
         gr2[i].GetYaxis().SetRangeUser(0,0.1)
         gr2[i].Draw("AeP")
         legend.AddEntry(gr2[i],"S14160-6010PS","p")

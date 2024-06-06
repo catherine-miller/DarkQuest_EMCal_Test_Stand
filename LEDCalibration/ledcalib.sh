@@ -1,5 +1,5 @@
 let i=0
-for run in {5131..5156}
+for run in {5158..5163} {5166..5170} 5172
 do
         python3 ../plotRunPHA.py $run 01 -l -q -b #for board 1: the EMCal board
 	python3 plotGauss_LED.py 02 $run $i
