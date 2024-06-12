@@ -1,0 +1,280 @@
+#######################################################################################################
+# Title: GainCalibration
+# Description: Read a Janus output file and filter events based on hodoscope hits (select valid
+#    combinations of hodo hits in the muon telescope configuration). Plot energy histograms.
+#    Find the mean for each channel. Calibrate--find the DT5202 gain setting to scale the output
+#    of a channel by a given factor. Return this calibration.
+# Arguments: 1. Run number of initial calibration run, 2. list of inital gain settings (comma separated)
+#    target MPV of channel you want to calibrate
+# Author: Catherine Miller, cmiller6@bu.edu
+# 24 April 2024
+#######################################################################################################
+
+import pandas
+import sys
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.optimize as fit
+from calibsettings import *
+
+fitrange = (5,1000)
+
+def calibrate(run_i, gs_i,homedir): #arguments: initial run number, initial gain settings
+    ch_lg = {}
+    ch_hg = {}
+    ch_hg_control = {}
+
+    #event count
+    npath = 2*[0]
+    neventstotal = 0
+
+    for ch in range(4):
+        ch_hg[ch] = [0]
+        ch_lg[ch] = [0]
+        ch_hg_control[ch] = [0]
+    def readevent(infile): #read one event and add appropriate channels to histogram
+        time = 0
+        hodohits = []
+        lg = []
+        hg = []
+        for ch in range(4):
+            line = infile.readline()
+            if not line: return False, time
+            while ("//" in line) or ("Tstamp" in line): line = infile.readline()
+            if (ch==0):
+                time = float(line.split()[0])
+                lg.append(float(line.split()[4]))
+                hg.append(float(line.split()[5]))
+                print("read one line")
+            else:
+                lg.append(float(line.split()[2]))
+                hg.append(float(line.split()[3]))
+        for hodo in range(len(chlist)-4):
+            line = infile.readline()
+            if not line: return False, time
+            if float(line.split()[2])> 280:
+                #print(line.split()[2])
+                hodohits.append(chlist[hodo + 4])
+        for i in range(2):
+            combo = triggercombos[i]
+            if (combo[0] in hodohits) and (combo[1] in hodohits):
+                npath[i] += 1
+                #the channels the particle did go through:
+                ch1 = channelcombos[i][0]
+                ch2 = channelcombos[i][1]
+                #the channels the particle did not go through:
+                ch1cont = channelcombos[i-1][0]
+                ch2cont = channelcombos[i-1][1]
+                ch_lg[ch1].append(lg[ch1])
+                ch_lg[ch2].append(lg[ch2])
+                ch_hg[ch1].append(hg[ch1])
+                ch_hg[ch2].append(hg[ch2])
+                ch_hg_control[ch1cont].append(hg[ch1cont])
+                ch_hg_control[ch2cont].append(hg[ch2cont])
+        return True, time
+
+
+
+
+
+    linegood = True
+    with open(homedir+"DataFiles/Run"+str(run_i)+"_list.txt") as infile:
+      if nhodochannels == 0:
+        for line in infile:
+          if ("//" in line): continue
+          if ("Tstamp" in line): continue
+          for ch in chlist:
+            if ("00  "+chlist_str[ch] in line):
+              if (ch==0):
+                nevents+=1
+                ch_lg[ch].append(float(line.split()[4]))
+                ch_hg[ch].append(float(line.split()[5]))
+              else:
+                ch_lg[ch].append(float(line.split()[2]))
+                ch_hg[ch].append(float(line.split()[3]))
+      else:
+        while linegood:
+            linegood, time = readevent(infile)
+            if (linegood): time_s = time*10**(-6)
+
+    #choose to plot with matplotlib rather than ROOT because not sure where ROOT is installed
+    def gauss(x,a,b,d):
+        f = b*np.exp(-d*(x-a)**2)
+        return f
+
+    ch_hg[2] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[2])
+    ch_hg[0] = np.sqrt(8.5**2+20**2)/np.sqrt(12.5**2+20**2)*np.array(ch_hg[0])
+    #make a histogram for each channel.
+    mpv = []
+    mpverr = []
+    plt.figure()
+    colors = ['red','green','black','blue']
+    for ii in range(len(ecalchannels)):
+        i = ecalchannels[ii]
+      #fit
+        hist,bins = np.histogram(ch_hg[i], range = fitrange,bins=25)
+        #find bin centers
+        bin_center = []
+        for j in range(len(bins)-1):
+            bin_center.append((bins[j]+bins[j+1])/2)
+        '''popt,pcov = fit.curve_fit(gauss,np.array(bin_center),hist,p0=[500,10,.0001])
+        perr = np.sqrt(np.diag(pcov))
+        mpv.append(popt[0])
+        mpverr.append(perr[0])'''
+        #find average of histogram
+        clipped = []
+        for j in range(len(ch_hg[i])):
+            if (ch_hg[i][j] < fitrange[1]) and (ch_hg[i][j] > fitrange[0]):
+                clipped.append(ch_hg[i][j])
+        if len(clipped) == 0:
+            clipped.append(1) #this doesn't mean anything, should just help keep your code from breaking
+        mpv.append(np.average(np.array(clipped)))
+        mpverr.append(np.std(np.array(clipped))/np.sqrt(len(clipped)))
+
+        #plot
+        #plt.errorbar(bin_center,hist,label="Channel "+str(i),yerr = np.sqrt(hist),color=colors[i],fmt='o',elinewidth=1,marker='o')
+        plt.hist(ch_hg[i],bins=50,label="Channel "+str(i),color=colors[i],fill=False,histtype='step',edgecolor=colors[i],range=fitrange)
+        x = np.arange(*fitrange,1)
+        #plt.plot(x,gauss(x,*popt),color=colors[i])
+        ylim = plt.gca().get_ylim()
+        plt.ylim(0,70)
+        plt.plot(np.repeat(mpv[i],1000),np.arange(0,1000,1),color=colors[i],linestyle = "dotted", label = "Channel "+str(i)+" mean")
+        plt.xlim(*fitrange)
+        plt.xlabel("ADC (High Gain)")
+        plt.ylabel("Counts")
+        plt.title("Inter-Channel Gain Calibration, Run "+sys.argv[1])
+        plt.legend()
+    plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".pdf")
+    plt.savefig(homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".png")
+    print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".pdf")
+    print("Saving figure "+homedir+"Figures/gaincalibration_Run"+str(sys.argv[1])+".png")
+
+    def analyze_control_hits():
+    #anal
+        mpv_control = []
+        mpverr_control = []
+        names = ['MIP through channel','MIP through other channels']
+        for i in range(len(ecalchannels)):
+            ii = ecalchannels[i]
+            plt.figure()
+            k = 0
+            for arr in [ch_hg[i],ch_hg_control[i]]:
+                hist,bins = np.histogram(ch_hg[i], range = fitrange,bins=25)
+                #find bin centers
+                bin_center = []
+                for j in range(len(bins)-1):
+                    bin_center.append((bins[j]+bins[j+1])/2)
+                #find average of histogram
+                clipped = []
+                for j in range(len(arr)):
+                    if (arr[j] < fitrange[1]) and (arr[j] > fitrange[0]):
+                        clipped.append(arr[j])
+                if len(clipped) == 0:
+                    clipped.append(1) #this doesn't mean anything, should just help keep your code from breaking
+                mpv_control.append(np.average(np.array(clipped)))
+                mpverr_control.append(np.std(np.array(clipped))/np.sqrt(len(clipped)))
+                plt.hist(arr,bins=50,label="Channel "+str(i)+", "+names[k],color=colors[k],fill=False,histtype='step',edgecolor=colors[k],range=fitrange)
+                x = np.arange(*fitrange,1)
+                #plt.plot(x,gauss(x,*popt),color=colors[i])
+                ylim = plt.gca().get_ylim()
+                plt.ylim(0,120)
+                plt.plot(np.repeat(np.average(np.array(clipped)),1000),np.arange(0,1000,1),color=colors[k],linestyle = "dotted", label = "Channel "+str(i)+" mean, "+names[k])
+                plt.xlim(*fitrange)
+                plt.xlabel("ADC (High Gain)")
+                plt.ylabel("Counts")
+                plt.title("Cosmic Muon Telescope Studies, Run "+sys.argv[1]+", Channel "+str(i))
+                plt.legend()
+                k+=1
+            plt.savefig(homedir+"Figures/Telescope_Comparison_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".pdf")
+            plt.savefig(homedir+"Figures/Telescope_Comparison_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".png")
+            print("Saving figure "+homedir+"Figures/Telescope_Comparison_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".pdf")
+            print("Saving figure "+homedir+"Figures/Telescope_Comparison_Run"+str(sys.argv[1])+"_Channel_"+str(i)+".png")
+        print(mpv_control)
+        print(mpverr_control)
+    
+
+
+    
+
+    print("Analyzing Run "+str(run_i))
+    print("MPV = ")
+    print(mpv)
+    print("MPV_err =")
+    print(mpverr)
+
+    #for now, adjust all peaks to align with highest peak
+    mpvmax = np.max(mpv)
+
+    def find_nearest(array, value): #returns index of first component in array that is higher than "value"
+        i = 0
+        #print(array[i])
+        #print(value)
+        while array[i] < value:
+            i += 1
+        return i
+
+    #function to find gain setting
+    def find_gain(gf, gs, gs_initial, MPV_f, MPV_i):
+        target = MPV_f/MPV_i #target change factor
+        #plt.style.use(hep.style.ROOT)
+        init = gf[np.where(gs == gs_initial)[0]] #initial gain factor
+        target_gf = target*gf[np.where(gs == gs_initial)[0]] #target gain factor
+        '''if target_gf < 1:
+            print("Error: gain factor cannot be less than 1")
+            return 1'''
+        i = find_nearest(gf, target_gf)
+        slope = (gf[i]-gf[i-1])/(gs[i]-gs[i-1])
+        x = (target_gf - gf[i])/slope
+        closest_gs = gs[i] + np.round(x)
+        print("The closest gain setting is "+str(closest_gs))
+        print("This will give an estimated MPV of "+str(np.round((slope*np.round(x)+gf[i])/init*MPV_i,0)))
+        '''
+        plt.figure()
+        plt.title("Gain Factor vs. DT5202 Gain Setting")
+        plt.ylabel("Gain Factor (MPV/MPV$_{GS=1}$)")
+        plt.xlabel("Gain Setting")
+        plt.errorbar(gs, gf,yerr=gf*.06,fmt='o',markersize=3,label="experimental gain factor (linear interpolation)",linestyle="dotted", color='red')
+        plt.plot(gs,np.repeat(target_gf,len(gs)),label="target gain factor = "+str(np.round(target_gf,3)[0]),color='green')
+        plt.plot(gs,np.repeat(init,len(gs)),label="initial gain factor = "+str(np.round(init,3)[0]),color='blue')
+        plt.legend()
+        plt.savefig("gaincalib.png")
+        '''
+        return closest_gs
+
+    df = pandas.read_csv(homedir+"DataFiles/gainscan_scaled.csv", names = ["gain","gainfactor","gferr","res","reserr"])
+
+    gs = np.array(df['gain'])
+    gf = np.array(df['gainfactor'])
+
+    #calculate run length
+    time_str = ""
+    hours = int(np.round(time_s/3600))
+    if hours != 0: time_str += str(hours) + " h, "
+    min = int(np.round(np.mod(time_s,3600)/60))
+    if min != 0: time_str += str(min) + " m, "
+    s = int(np.round(np.mod(time_s,60)))
+    time_str += str(s) + " s"
+    print("\nNumber of events passing trigger path 1: "+str(npath[0]))
+    print("Number of events passing trigger path 2: "+str(npath[1]))
+    print("Total events passing selection: "+str(npath[0]+npath[1]))
+    print("Run length: "+time_str)
+    print("Event rate (passing selection): "+str(np.round((npath[0]+npath[1])/time_s,5))+" Hz \n")
+    #find new gain settings to calibrate
+    gain_f = [0] * 4
+    print("New calibration:")
+    for ii in range(len(ecalchannels)):
+        i = ecalchannels[ii]
+        print("Channel "+str(i))
+        gain_f[i] = find_gain(gf,gs,gs_i[i],mpvmax,mpv[i])
+    analyze_control_hits()
+    return gain_f
+    
+
+if __name__ == "__main__":
+    gainsetting = str(sys.argv[2]).split(",")
+    for i in range(len(gainsetting)):
+            gainsetting[i] = int(gainsetting[i])
+    calibrate(sys.argv[1],gainsetting,homedir)
+
+
+
